@@ -1,11 +1,15 @@
 #include <Wire.h> 
 #include <LiquidCrystal_I2C.h>
 
-int ThermistorPin = 0;
-int Vo;
-float R1 = 10000;
-float logR2, R2, T;
-float c1 = 1.009249522e-03, c2 = 2.378405444e-04, c3 = 2.019202697e-07;
+#define SERIAL_R 15500
+
+
+#define B 3950 // B-коэффициент
+#define SERIAL_R 39000 // сопротивление последовательного резистора, 102 кОм
+#define THERMISTOR_R 39000 // номинальное сопротивления термистора, 100 кОм
+#define NOMINAL_T 25 // номинальная температура (при которой TR = 100 кОм)
+
+const byte tempPin = A0;
 
 
 const byte interruptPin = 2;
@@ -15,6 +19,7 @@ LiquidCrystal_I2C lcd(0x3f, 16, 2);
 
 void setup()
 {
+  Serial.begin( 115200 );
 	// initialize the LCD
 	lcd.begin();
 
@@ -22,26 +27,38 @@ void setup()
 	lcd.backlight();
 	lcd.print("Hello, world!");
  //pinMode(interruptPin, INPUT);
+  ///attachInterrupt(0, blink, RISING);
   attachInterrupt(0, blink, RISING);
+  pinMode( tempPin, INPUT );
 }
 
 void loop()
 {
+   int t = analogRead( tempPin );
+    float tr = 1023.0 / t - 1;
+    tr = SERIAL_R / tr;
+    Serial.print("R=");
+    Serial.print(tr);
+    Serial.print(", t=");
 
-Vo = analogRead(ThermistorPin);
-  R2 = R1 * (1023.0 / (float)Vo - 1.0);
-  logR2 = log(R2);
-  T = (1.0 / (c1 + c2*logR2 + c3*logR2*logR2*logR2));
-  T = T - 273.15;
-  T = (T * 9.0)/ 5.0 ; 
-
+    float steinhart;
+    steinhart = tr / THERMISTOR_R; // (R/Ro)
+    steinhart = log(steinhart); // ln(R/Ro)
+    steinhart /= B; // 1/B * ln(R/Ro)
+    steinhart += 1.0 / (NOMINAL_T + 273.15); // + (1/To)
+    steinhart = 1.0 / steinhart; // Invert
+    steinhart -= 273.15; 
+    Serial.println(steinhart);
+    
   
 	lcd.clear();
   lcd.print("W = ");
   lcd.print(count);
+  lcd.setCursor(0,1);
   lcd.print("T = ");
-  lcd.print(T);
-  delay(100);
+  lcd.print(steinhart);
+  //lcd.print(T);
+  delay(500);
 }
 
 void blink() {
